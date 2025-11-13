@@ -1,0 +1,38 @@
+﻿# OS / Editor
+.DS_Store
+Thumbs.db
+*.log
+
+# IntelliJ / Android Studio
+*.iml
+.idea/
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/gradle.xml
+.idea/**/libraries
+
+# Gradle
+.gradle/
+**/.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+local.properties
+.cxx/
+.externalNativeBuild/
+captures/
+outputs/
+
+# Keystore
+*.jks
+*.keystore
+
+# Misc
+.gradle/
+*.apk
+*.ap_*
