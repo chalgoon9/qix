@@ -1,4 +1,4 @@
-package com.example.qixpanic
+﻿package com.example.qixpanic
 
 import android.content.Context
 import android.graphics.*
@@ -35,14 +35,19 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var moveAccumulator = 0f
     private val stepPerSecond = 14f
     private val stepDuration = 1f / stepPerSecond
+
     private var lives = 3
+    private var level = 1
+    private var score = 0
+    private var targetPercent = 75f
     private var levelCleared = false
     private var gameOver = false
+    private var paused = false
 
     // Enemies
     private data class Enemy(var x: Float, var y: Float, var dx: Float, var dy: Float)
     private val enemies = mutableListOf<Enemy>()
-    private val enemySpeed = 8f // cells per second
+    private val baseEnemySpeed = 8f // cells per second
 
     // Rendering helpers
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -83,16 +88,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun initLevel() {
         enemies.clear()
-        // Spawn 2 enemies somewhere in the middle area
-        repeat(2) {
+        val enemyCount = (2 + (level - 1)).coerceAtMost(6)
+        val speed = baseEnemySpeed + (level - 1) * 1.0f
+        repeat(enemyCount) {
             val ex = Random.nextInt(cols / 4, cols * 3 / 4).toFloat()
             val ey = Random.nextInt(rows / 4, rows * 3 / 4).toFloat()
             var dx = if (Random.nextBoolean()) 1f else -1f
             var dy = if (Random.nextBoolean()) 1f else -1f
-            // Normalize to enemySpeed
             val len = kotlin.math.sqrt(dx * dx + dy * dy)
-            dx = dx / len * enemySpeed
-            dy = dy / len * enemySpeed
+            dx = dx / len * speed
+            dy = dy / len * speed
             enemies += Enemy(ex, ey, dx, dy)
         }
 
@@ -105,6 +110,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         moveAccumulator = 0f
         levelCleared = false
         gameOver = false
+        paused = false
+        // Clear any stray trail
+        for (x in 0 until cols) for (y in 0 until rows) if (grid[x][y] == TRAIL) grid[x][y] = EMPTY
     }
 
     fun resume() {
@@ -140,14 +148,43 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        val x = event.x
+        val y = event.y
+
+        // UI hit regions
+        val pauseRect = getPauseRect()
+        val (leftR, rightR, upR, downR) = getDpadRects()
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                touchStartX = event.x
-                touchStartY = event.y
+                // Pause toggle
+                if (pointInRect(x, y, pauseRect)) {
+                    paused = !paused
+                    return true
+                }
+                // D-Pad
+                if (pointInRect(x, y, leftR)) { dirX = -1; dirY = 0; return true }
+                if (pointInRect(x, y, rightR)) { dirX = 1; dirY = 0; return true }
+                if (pointInRect(x, y, upR)) { dirX = 0; dirY = -1; return true }
+                if (pointInRect(x, y, downR)) { dirX = 0; dirY = 1; return true }
+
+                touchStartX = x
+                touchStartY = y
             }
-            MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
-                val dx = event.x - touchStartX
-                val dy = event.y - touchStartY
+            MotionEvent.ACTION_UP -> {
+                if (gameOver) {
+                    restartGame()
+                    return true
+                }
+                if (levelCleared) {
+                    level += 1
+                    initLevel()
+                    return true
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = x - touchStartX
+                val dy = y - touchStartY
                 if (abs(dx) > 16 || abs(dy) > 16) {
                     if (abs(dx) > abs(dy)) {
                         dirX = if (dx > 0) 1 else -1
@@ -156,17 +193,24 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                         dirX = 0
                         dirY = if (dy > 0) 1 else -1
                     }
-                    // Reset start to allow direction changes while dragging
-                    touchStartX = event.x
-                    touchStartY = event.y
+                    touchStartX = x
+                    touchStartY = y
                 }
             }
         }
         return true
     }
 
+    private fun restartGame() {
+        level = 1
+        score = 0
+        lives = 3
+        initField()
+        initLevel()
+    }
+
     fun update(delta: Float) {
-        if (gameOver || levelCleared) return
+        if (gameOver || levelCleared || paused) return
 
         moveAccumulator += delta
         while (moveAccumulator >= stepDuration) {
@@ -202,7 +246,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         // Check win condition
         val pct = claimedPercent()
-        if (pct >= 75f) {
+        if (pct >= targetPercent) {
             levelCleared = true
         }
     }
@@ -219,8 +263,6 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             }
             // Reached border -> close shape
             if (grid[nx][ny] == SOLID) {
-                // Mark current as trail then close
-                // (optional; we close without marking current)
                 closeTrailAndClaim()
                 px = nx
                 py = ny
@@ -270,6 +312,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun closeTrailAndClaim() {
+        // Snapshot empties to count claimed cells later
+        var emptyBefore = 0
+        for (x in 0 until cols) {
+            for (y in 0 until rows) {
+                if (grid[x][y] == EMPTY) emptyBefore++
+            }
+        }
+
         // 1) Flood from all enemies over non-solid, non-trail cells => reachable
         val reachable = Array(cols) { BooleanArray(rows) { false } }
         val qx = IntArray(cols * rows)
@@ -316,6 +366,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 if (grid[x][y] == TRAIL) grid[x][y] = SOLID
             }
         }
+
+        // Score: cells claimed
+        var emptyAfter = 0
+        for (x in 0 until cols) {
+            for (y in 0 until rows) {
+                if (grid[x][y] == EMPTY) emptyAfter++
+            }
+        }
+        val claimed = (emptyBefore - emptyAfter).coerceAtLeast(0)
+        score += claimed
     }
 
     private fun claimedPercent(): Float {
@@ -375,15 +435,24 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             canvas.drawCircle(ex, ey, max(2f, cellSize * 0.35f), paint)
         }
 
-        // UI
+        // UI text
         val pct = claimedPercent()
         canvas.drawText("CLAIMED: ${"%2.0f".format(pct)}%", 16f, 50f, textPaint)
         canvas.drawText("LIVES: $lives", 16f, 95f, textPaint)
+        canvas.drawText("LEVEL: $level", 16f, 140f, textPaint)
+        canvas.drawText("SCORE: $score", 16f, 185f, textPaint)
 
-        if (levelCleared) {
-            drawCenteredText(canvas, "LEVEL CLEAR!", Color.CYAN)
+        // Pause button
+        drawPauseButton(canvas)
+        // D-Pad
+        drawDpad(canvas)
+
+        if (paused) {
+            drawCenteredText(canvas, "PAUSED", Color.LTGRAY)
+        } else if (levelCleared) {
+            drawCenteredText(canvas, "LEVEL CLEAR! Tap", Color.CYAN)
         } else if (gameOver) {
-            drawCenteredText(canvas, "GAME OVER", Color.RED)
+            drawCenteredText(canvas, "GAME OVER - Tap", Color.RED)
         }
     }
 
@@ -391,12 +460,57 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         val p = Paint(textPaint)
         p.color = color
         p.textSize = 64f
-        val bounds = Rect()
-        p.getTextBounds(msg, 0, msg.length, bounds)
-        val x = (width - bounds.width()) / 2f
-        val y = (height + bounds.height()) / 2f
+        p.textAlign = Paint.Align.CENTER
+        val x = width / 2f
+        val y = height / 2f
         canvas.drawText(msg, x, y, p)
     }
+
+    private fun getPauseRect(): RectF {
+        val w = 140f
+        val h = 60f
+        return RectF(width - w - 16f, 16f, width - 16f, 16f + h)
+    }
+
+    private fun drawPauseButton(canvas: Canvas) {
+        val r = getPauseRect()
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(160, 60, 60, 60) }
+        canvas.drawRoundRect(r, 12f, 12f, p)
+        val tp = Paint(textPaint)
+        tp.textSize = 32f
+        tp.textAlign = Paint.Align.CENTER
+        tp.color = Color.WHITE
+        canvas.drawText(if (paused) "RESUME" else "PAUSE", r.centerX(), r.centerY() + 12f, tp)
+    }
+
+    private data class DpadRects(val left: RectF, val right: RectF, val up: RectF, val down: RectF)
+
+    private fun getDpadRects(): DpadRects {
+        val margin = 24f
+        val base = max(120f, min(width, height) * 0.16f)
+        val cx = margin + base
+        val cy = height - margin - base
+        val btn = base * 0.9f
+        val half = btn / 2f
+        val span = base
+        val left = RectF(cx - span * 1.5f, cy - half, cx - span * 0.5f, cy + half)
+        val right = RectF(cx + span * 0.5f, cy - half, cx + span * 1.5f, cy + half)
+        val up = RectF(cx - half, cy - span * 1.5f, cx + half, cy - span * 0.5f)
+        val down = RectF(cx - half, cy + span * 0.5f, cx + half, cy + span * 1.5f)
+        return DpadRects(left, right, up, down)
+    }
+
+    private fun drawDpad(canvas: Canvas) {
+        val (left, right, up, down) = getDpadRects()
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.color = Color.argb(100, 255, 255, 255)
+        canvas.drawRoundRect(left, 12f, 12f, p)
+        canvas.drawRoundRect(right, 12f, 12f, p)
+        canvas.drawRoundRect(up, 12f, 12f, p)
+        canvas.drawRoundRect(down, 12f, 12f, p)
+    }
+
+    private fun pointInRect(x: Float, y: Float, r: RectF): Boolean = x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
 
     private class GameThread(
         private val surfaceHolder: SurfaceHolder,
