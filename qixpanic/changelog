@@ -1,0 +1,41 @@
+diff --git a/qixpanic/app/build.gradle b/qixpanic/app/build.gradle
+index c1b9a7c..8662cba 100644
+--- a/qixpanic/app/build.gradle
++++ b/qixpanic/app/build.gradle
+@@ -35,4 +35,3 @@ android {
+ dependencies {
+     implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
+ }
+-
+diff --git a/qixpanic/app/src/main/AndroidManifest.xml b/qixpanic/app/src/main/AndroidManifest.xml
+index 453f73b..766b96f 100644
+--- a/qixpanic/app/src/main/AndroidManifest.xml
++++ b/qixpanic/app/src/main/AndroidManifest.xml
+@@ -1,8 +1,11 @@
+ ﻿<?xml version="1.0" encoding="utf-8"?>
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+-    `<application
++    <application
+         android:allowBackup="true"
+-        android:label="Qix Panic" android:icon="@android:drawable/sym_def_app_icon" android:roundIcon="@android:drawable/sym_def_app_icon" `android:supportsRtl="true"
++        android:label="Qix Panic" 
++        android:icon="@android:drawable/sym_def_app_icon" 
++        android:roundIcon="@android:drawable/sym_def_app_icon" 
++        android:supportsRtl="true"
+         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+         <activity android:name=".MainActivity"
+             android:exported="true"
+diff --git a/qixpanic/gradle.properties b/qixpanic/gradle.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/qixpanic/gradle/wrapper/gradle-wrapper.properties b/qixpanic/gradle/wrapper/gradle-wrapper.properties
+new file mode 100644
+index 0000000..c2dd7fc
+--- /dev/null
++++ b/qixpanic/gradle/wrapper/gradle-wrapper.properties
+@@ -0,0 +1,5 @@
++distributionBase=GRADLE_USER_HOME
++distributionPath=wrapper/dists
++zipStoreBase=GRADLE_USER_HOME
++zipStorePath=wrapper/dists
++distributionUrl=https://services.gradle.org/distributions/gradle-8.1-bin.zip
